@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Mini Wordle (Shorter Key Labels)</title>
+  <style>
+    /* ---------- BASIC RESET ---------- */
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    body {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      font-family: sans-serif;
+      background-color: #f0f0f0;
+      color: #333333;
+      min-height: 100vh;
+    }
+
+    h1 {
+      margin-bottom: 1rem;
+      font-size: 2rem;
+      color: #222222;
+    }
+
+    /* ---------- CENTERING CONTAINER (400px wide) ---------- */
+    #game-container {
+      width: 400px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    /* ---------- GAME BOARD ---------- */
+    #board {
+      display: grid;
+      grid-template-rows: repeat(6, 1fr);
+      grid-gap: 0.5rem;
+      margin-bottom: 1rem;
+      width: 100%;
+    }
+
+    .row {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      grid-gap: 0.5rem;
+    }
+
+    .tile {
+      width: 64px;
+      height: 64px;
+      border: 2px solid #cccccc;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 2rem;
+      font-weight: bold;
+      text-transform: uppercase;
+      user-select: none;
+      background-color: #ffffff;
+      color: #333333;
+    }
+
+    .tile.filled {
+      border-color: #999999;
+    }
+
+    .tile.correct {
+      background-color: #6aaa64;
+      border-color: #6aaa64;
+      color: #ffffff;
+    }
+
+    .tile.present {
+      background-color: #c9b458;
+      border-color: #c9b458;
+      color: #ffffff;
+    }
+
+    .tile.absent {
+      background-color: #d3d6da;
+      border-color: #d3d6da;
+      color: #777777;
+    }
+
+    /* ---------- KEYBOARD ---------- */
+    #keyboard {
+      margin-top: 1rem;
+      display: flex;
+      flex-direction: column;
+      width: 100%;
+      user-select: none;
+    }
+
+    .key-row {
+      display: flex;
+      justify-content: center;
+      gap: 0.4rem;
+      margin-bottom: 0.4rem;
+    }
+
+    .key {
+      background-color: #e1e1e1;
+      border: none;
+      border-radius: 4px;
+      color: #333333;
+      font-size: 1rem;
+      font-weight: bold;
+      text-transform: uppercase;
+      cursor: pointer;
+      flex: 1;
+      min-width: 35px;
+      height: 56px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      user-select: none;
+    }
+
+    /* Enter/Backspace are 1.5× width */
+    .key[data-key="Enter"],
+    .key[data-key="Backspace"] {
+      flex: 1.5;
+      min-width: 50px;
+    }
+
+    .key:disabled {
+      background-color: #c0c0c0;
+      cursor: default;
+      color: #777777;
+    }
+
+    .key.correct {
+      background-color: #6aaa64;
+      color: #ffffff;
+    }
+    .key.present {
+      background-color: #c9b458;
+      color: #ffffff;
+    }
+    .key.absent {
+      background-color: #d3d6da;
+      color: #777777;
+    }
+
+    /* ---------- MESSAGE ---------- */
+    #message {
+      margin-top: 1rem;
+      height: 1.5rem;
+      font-size: 1rem;
+      color: #555555;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <h1>Mini Wordle</h1>
+
+  <div id="game-container">
+    <div id="board"></div>
+    <div id="keyboard"></div>
+    <div id="message"></div>
+  </div>
+
+  <script>
+    // ---------- GLOBALS ---------- //
+    const ROWS = 6;
+    const COLS = 5;
+    let currentRow = 0;
+    let currentCol = 0;
+    let board = [];
+
+    // Build board grid
+    const boardContainer = document.getElementById("board");
+    for (let r = 0; r < ROWS; r++) {
+      const rowDiv = document.createElement("div");
+      rowDiv.classList.add("row");
+      const rowTiles = [];
+      for (let c = 0; c < COLS; c++) {
+        const tile = document.createElement("div");
+        tile.classList.add("tile");
+        tile.setAttribute("id", `tile-${r}-${c}`);
+        rowDiv.appendChild(tile);
+        rowTiles.push(tile);
+      }
+      boardContainer.appendChild(rowDiv);
+      board.push(rowTiles);
+    }
+
+    // Build on-screen keyboard with shortened labels for Enter/Backspace
+    const keyboardContainer = document.getElementById("keyboard");
+    const keysLayout = [
+      ["q","w","e","r","t","y","u","i","o","p"],
+      ["a","s","d","f","g","h","j","k","l"],
+      ["Enter","z","x","c","v","b","n","m","Backspace"]
+    ];
+    keysLayout.forEach(row => {
+      const rowDiv = document.createElement("div");
+      rowDiv.classList.add("key-row");
+      row.forEach(k => {
+        const keyBtn = document.createElement("button");
+        keyBtn.setAttribute("data-key", k);
+
+        // Shorten the displayed text for Enter and Backspace:
+        if (k === "Enter") {
+          keyBtn.textContent = "EN";
+        } else if (k === "Backspace") {
+          keyBtn.textContent = "BS";
+        } else {
+          keyBtn.textContent = k.toUpperCase();
+        }
+
+        keyBtn.classList.add("key");
+        keyBtn.addEventListener("click", () => handleKey(k));
+        rowDiv.appendChild(keyBtn);
+      });
+      keyboardContainer.appendChild(rowDiv);
+    });
+
+    const messageDiv = document.getElementById("message");
+
+    // Start a new game on load
+    window.addEventListener("load", () => {
+      fetch("/api/new")
+        .then(res => {
+          if (!res.ok) throw new Error("Could not start new game");
+        })
+        .catch(err => console.error(err));
+    });
+
+    // Handle physical keyboard
+    window.addEventListener("keydown", (e) => {
+      const k = e.key;
+      if (/^[a-zA-Z]$/.test(k)) {
+        handleKey(k.toLowerCase());
+      } else if (k === "Enter") {
+        handleKey("Enter");
+      } else if (k === "Backspace") {
+        handleKey("Backspace");
+      }
+    });
+
+    function handleKey(key) {
+      if (currentRow >= ROWS) return; // game over
+
+      if (key === "Enter") {
+        if (currentCol < COLS) return;
+        const guess = board[currentRow].map(t => t.textContent).join("").toLowerCase();
+        fetch("/api/guess", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ guess })
+        })
+        .then(res => res.json())
+        .then(data => {
+          data.feedback.forEach((f, idx) => {
+            const tile = board[currentRow][idx];
+            tile.classList.add(f);
+
+            const keyButton = document.querySelector(`.key[data-key="${guess[idx]}"]`);
+            if (!keyButton.classList.contains("correct")) {
+              keyButton.classList.remove("present", "absent");
+              keyButton.classList.add(f);
+            }
+          });
+
+          if (data.status === "win") {
+            messageDiv.textContent = "🎉 You guessed it!";
+            currentRow = ROWS;
+          } else if (data.status === "lose") {
+            messageDiv.textContent = `💔 Game over. Word was "${data.answer.toUpperCase()}"`;
+            currentRow = ROWS;
+          } else {
+            currentRow++;
+            currentCol = 0;
+          }
+        })
+        .catch(err => console.error(err));
+
+      } else if (key === "Backspace") {
+        if (currentCol === 0) return;
+        currentCol--;
+        const tile = board[currentRow][currentCol];
+        tile.textContent = "";
+        tile.classList.remove("filled");
+
+      } else {
+        if (currentCol >= COLS) return;
+        const letter = key.toLowerCase();
+        if (!/^[a-z]$/.test(letter)) return;
+        const tile = board[currentRow][currentCol];
+        tile.textContent = letter.toUpperCase();
+        tile.classList.add("filled");
+        currentCol++;
+      }
+    }
+  </script>
+</body>
+</html>
